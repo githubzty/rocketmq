@@ -29,11 +29,17 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 public class NamesrvConfig {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+    //rocketmq的home主目录地址,rocketmqHome就是尝试获取ROCKETMQ_HOME环境变量那个路径值。
     private String rocketmqHome = System.getProperty(MixAll.ROCKETMQ_HOME_PROPERTY, System.getenv(MixAll.ROCKETMQ_HOME_ENV));
+    //nameServer存放kv配置属性的路径
     private String kvConfigPath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "kvConfig.json";
+    //nameServer自己的配置存储路径
     private String configStorePath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "namesrv.properties";
+    //生产环境的名称
     private String productEnvName = "center";
+    //是否启用测试集群
     private boolean clusterTest = false;
+    //是否启动顺序消息
     private boolean orderMessageEnable = false;
 
     public boolean isOrderMessageEnable() {

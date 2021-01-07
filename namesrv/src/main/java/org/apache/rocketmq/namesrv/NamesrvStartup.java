@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 
 public class NamesrvStartup {
 
+    //和日志，配置，命令行相关。
     private static InternalLogger log;
     private static Properties properties = null;
     private static CommandLine commandLine = null;
@@ -54,6 +55,10 @@ public class NamesrvStartup {
     public static NamesrvController main0(String[] args) {
 
         try {
+            //NamesrvController核心组件，用来接收、处理各种各样请求的。
+            //类比学习：用过spring mvc的都知道，controller它一般就是用来接受各种各样请求的。
+            //而nameServer它的核心功能就是接受broker的注册请求，producer的拉取路由信息请求等。
+            //所以可以知道这个controller是核心组件。可以先进createNamesrvController看下怎么创建的。
             NamesrvController controller = createNamesrvController(args);
             start(controller);
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
@@ -69,6 +74,7 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController createNamesrvController(String[] args) throws IOException, JoranException {
+        //次要代码，不做深入。主要是启动的时候加的命令行参数，做个解析等。
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         //PackageConflictDetect.detectFastjson();
 
@@ -79,18 +85,31 @@ public class NamesrvStartup {
             return null;
         }
 
+        //核心代码。关于nameServer的一些配置信息。
+        //NamesrvConfig是nameServer自身的一些配置信息。
+        //NettyServerConfig是用于接收网络请求的netty服务器的配置参数。
+        //设置nameServer默认监听端口号9876（后续代码通过命令行或者配置文件覆盖）。
+        //从这里也可以看到，nameServer对外接受broker、producer等的网络请求，是基于netty实现的网络服务器。
         final NamesrvConfig namesrvConfig = new NamesrvConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
         nettyServerConfig.setListenPort(9876);
+
+        //使用mqnamesrv启动nameServer的时候，带上-c这个选项。
+        //那么就是带上一个配置文件地址，这里就读取配置文件里的内容。
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
+                //file就是-c都带着的配置文件地址。这里基于输入流从配置文件读取到配置。
+                //将读取到的配置，放到Properties类里。
                 InputStream in = new BufferedInputStream(new FileInputStream(file));
                 properties = new Properties();
                 properties.load(in);
+
+                //通过MixAll,将Properties类中配置，覆盖到前面创建的两个配置类里。（配置文件的配置高于默认配置）
                 MixAll.properties2Object(properties, namesrvConfig);
                 MixAll.properties2Object(properties, nettyServerConfig);
 
+                //nameServer自己的配置文件地址，就是这个-c后的参数，所以设置下
                 namesrvConfig.setConfigStorePath(file);
 
                 System.out.printf("load config properties file OK, %s%n", file);
@@ -98,6 +117,7 @@ public class NamesrvStartup {
             }
         }
 
+        //配置了-p也就是print参数，那么就打印下配置信息，然后exit。
         if (commandLine.hasOption('p')) {
             InternalLogger console = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_CONSOLE_NAME);
             MixAll.printObjectProperties(console, namesrvConfig);
@@ -105,6 +125,9 @@ public class NamesrvStartup {
             System.exit(0);
         }
 
+        //命令行配置的覆盖到配置类里(只有namesrvConfig没有nettyServerConfig)
+        //从这里可以看出，配置优先级的实现：命令行>配置文件>默认代码配置。
+        //nameServer一般用默认代码配置就行，不用配置文件和命令行。
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
 
         if (null == namesrvConfig.getRocketmqHome()) {
@@ -112,17 +135,19 @@ public class NamesrvStartup {
             System.exit(-2);
         }
 
+        //Logger，Configurator相关代码。不关键
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         JoranConfigurator configurator = new JoranConfigurator();
         configurator.setContext(lc);
         lc.reset();
         configurator.doConfigure(namesrvConfig.getRocketmqHome() + "/conf/logback_namesrv.xml");
 
+        //打印下两个配置类的所有配置
         log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
-
         MixAll.printObjectProperties(log, namesrvConfig);
         MixAll.printObjectProperties(log, nettyServerConfig);
 
+        //关键，使用前面创建出来的两个配置类作为参数，创建出来NamesrvController
         final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig);
 
         // remember all configs to prevent discard

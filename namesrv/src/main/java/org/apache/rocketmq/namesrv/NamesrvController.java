@@ -77,13 +77,16 @@ public class NamesrvController {
 
         this.kvConfigManager.load();
 
+        //关键，使用controller里的netty的config配置作为参数，构建出来了netty网络服务器。进入查看
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
+        //构建netty工作线程池
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
         this.registerProcessor();
 
+        //启动后台线程，执行定时任务，定时扫描哪些broker没发心跳，就知道他挂了。
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -92,6 +95,7 @@ public class NamesrvController {
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        //从这里往下，暂且不看
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -153,6 +157,7 @@ public class NamesrvController {
     }
 
     public void start() throws Exception {
+        //进入查看
         this.remotingServer.start();
 
         if (this.fileWatchService != null) {

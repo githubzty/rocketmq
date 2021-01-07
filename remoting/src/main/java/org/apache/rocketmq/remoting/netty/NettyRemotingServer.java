@@ -96,6 +96,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig,
         final ChannelEventListener channelEventListener) {
         super(nettyServerConfig.getServerOnewaySemaphoreValue(), nettyServerConfig.getServerAsyncSemaphoreValue());
+        //关键，serverBootstrap是netty核心类，代表一个netty服务器，通过它可以让netty监听一个端口号上的网络请求。
+        //这里只是创建出来，回过去看后续步骤controller.start()
         this.serverBootstrap = new ServerBootstrap();
         this.nettyServerConfig = nettyServerConfig;
         this.channelEventListener = channelEventListener;
@@ -195,6 +197,12 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         prepareSharableHandlers();
 
+        //核心就是基于netty的api去配置和启动一个netty网络服务器。
+        //serverBootstrap.group是基于serverBootstrap的group对netty进行各种网络上的配置。
+        //.childHandler下面其实就是设置了一堆网络请求处理器。
+        //只要netty服务器收到一个请求，就依次使用下面的处理器进行处理请求。
+        //例如handshakeHandler负责连接握手；例如NettyDecoder负责编码解码；IdleStateHandler负责连接空闲管理；
+        //例如connectionManageHandler负责网络连接管理；serverHandler负责最关键的网络请求处理。
         ServerBootstrap childHandler =
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)
                 .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
@@ -204,7 +212,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 .childOption(ChannelOption.TCP_NODELAY, true)
                 .childOption(ChannelOption.SO_SNDBUF, nettyServerConfig.getServerSocketSndBufSize())
                 .childOption(ChannelOption.SO_RCVBUF, nettyServerConfig.getServerSocketRcvBufSize())
-                .localAddress(new InetSocketAddress(this.nettyServerConfig.getListenPort()))
+                .localAddress(new InetSocketAddress(this.nettyServerConfig.getListenPort()))   //设置了netty要监听的端口，默认9876
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) throws Exception {
@@ -225,6 +233,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
 
         try {
+            //启动netty服务器。bind其实就是绑定和监听一个端口。截至到这里，nameServer就启动了，开始监听9876端口了。
             ChannelFuture sync = this.serverBootstrap.bind().sync();
             InetSocketAddress addr = (InetSocketAddress) sync.channel().localAddress();
             this.port = addr.getPort();

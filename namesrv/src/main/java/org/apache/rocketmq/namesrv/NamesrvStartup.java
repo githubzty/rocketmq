@@ -60,6 +60,7 @@ public class NamesrvStartup {
             //而nameServer它的核心功能就是接受broker的注册请求，producer的拉取路由信息请求等。
             //所以可以知道这个controller是核心组件。可以先进createNamesrvController看下怎么创建的。
             NamesrvController controller = createNamesrvController(args);
+            //上面是创建出来了NamesrvController，下面进去看下如何start
             start(controller);
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
             log.info(tip);
@@ -162,6 +163,7 @@ public class NamesrvStartup {
             throw new IllegalArgumentException("NamesrvController is null");
         }
 
+        //关键，对前面创建出来的controller进行初始化操作。进入查看。
         boolean initResult = controller.initialize();
         if (!initResult) {
             controller.shutdown();
@@ -176,6 +178,7 @@ public class NamesrvStartup {
             }
         }));
 
+        //关键，把controller.initialize()里初始化的NettyRemotingServer给start起来。
         controller.start();
 
         return controller;

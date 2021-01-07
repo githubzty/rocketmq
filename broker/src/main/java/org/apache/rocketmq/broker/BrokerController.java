@@ -232,17 +232,20 @@ public class BrokerController {
     }
 
     public boolean initialize() throws CloneNotSupportedException {
+        //brokerController里构建过各种manager了，这里就是用他们加载一些磁盘上数据到内存。
+        //加载topic的配置，消费者的消费Offset，consumer订阅组、过滤器
         boolean result = this.topicConfigManager.load();
-
         result = result && this.consumerOffsetManager.load();
         result = result && this.subscriptionGroupManager.load();
         result = result && this.consumerFilterManager.load();
 
+        //磁盘数据成功load到内存后，创建messageStore也就是消息存储管理组件。（写入消息到commitLog等等）
         if (result) {
             try {
                 this.messageStore =
                     new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
                         this.brokerConfig);
+                //如果启用了DLeger进行主从同步和管理commitLog，这里就需要初始化DLeger相关组件。
                 if (messageStoreConfig.isEnableDLegerCommitLog()) {
                     DLedgerRoleChangeHandler roleChangeHandler = new DLedgerRoleChangeHandler(this, (DefaultMessageStore) messageStore);
                     ((DLedgerCommitLog)((DefaultMessageStore) messageStore).getCommitLog()).getdLedgerServer().getdLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
@@ -258,13 +261,18 @@ public class BrokerController {
             }
         }
 
+        //使用消息存储管理组件加载磁盘上消息数据
         result = result && this.messageStore.load();
 
         if (result) {
+            //创建broker的netty服务器。
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
+
+            //使用前面new BrokerController里创建的阻塞队列，创建一堆线程池。不详细展开。
+            //取名里带fix，实际是都是用7个参数new出来的。
             this.sendMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getSendMessageThreadPoolNums(),
                 this.brokerConfig.getSendMessageThreadPoolNums(),
@@ -309,6 +317,7 @@ public class BrokerController {
                 this.clientManagerThreadPoolQueue,
                 new ThreadFactoryImpl("ClientManageThread_"));
 
+            //负责给nameServer发送心跳的线程池。
             this.heartbeatExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getHeartbeatThreadPoolNums(),
                 this.brokerConfig.getHeartbeatThreadPoolNums(),
@@ -849,14 +858,15 @@ public class BrokerController {
     }
 
     public void start() throws Exception {
+        //启动核心消息存储组件，具体先不管。
         if (this.messageStore != null) {
             this.messageStore.start();
         }
 
+        //核心，启动netty服务器接收请求，类似nameServer。
         if (this.remotingServer != null) {
             this.remotingServer.start();
         }
-
         if (this.fastRemotingServer != null) {
             this.fastRemotingServer.start();
         }
@@ -865,6 +875,8 @@ public class BrokerController {
             this.fileWatchService.start();
         }
 
+        //关键，broker的netty客户端。
+        //broker发送请求到nameServer去注册，以及续约心跳，都通过这个组件。
         if (this.brokerOuterAPI != null) {
             this.brokerOuterAPI.start();
         }
@@ -887,6 +899,8 @@ public class BrokerController {
             this.registerBrokerAll(true, false, true);
         }
 
+        //关键，线程池里提交一个任务，去向nameServer注册
+        //延迟10s开始注册，注册的间隔，在10s到60s之间
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override

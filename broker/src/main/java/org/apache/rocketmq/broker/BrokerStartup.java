@@ -54,13 +54,17 @@ public class BrokerStartup {
     public static String configFile = null;
     public static InternalLogger log;
 
+    //和NamesrvStartup类似，只不过两个人写的，方法封装上没有特别统一
     public static void main(String[] args) {
         start(createBrokerController(args));
     }
 
     public static BrokerController start(BrokerController controller) {
         try {
-
+            //1. broker作为netty服务器接收producer和consumer发送请求，所以通过remotingServer.start通过调用netty的api启动netty服务器。（和nameServer类似）
+            //2. broker作为netty客户端接向nameServer注册以及发送心跳，所以通过brokerOuterAPI.start启动作为netty客户端的组件。
+            //3. 向scheduled线程池里面提交一个任务，让它去给nameServer注册。
+            //4. 启动消息存储核心组件messageStore.start
             controller.start();
 
             String tip = "The broker[" + controller.getBrokerConfig().getBrokerName() + ", "
@@ -107,20 +111,30 @@ public class BrokerStartup {
                 System.exit(-1);
             }
 
+            //关键，主要的就是这里的四个配置类：brokerConfig、nettyServerConfig、nettyClientConfig、messageStoreConfig。
+            //brokerConfig就是broker自身的一些配置信息，messageStoreConfig消息存储的一些配置信息。
+            //nettyServerConfig就是broker作为netty服务器的配置信息，nettyClientConfig就是broker作为netty客户端的配置信息。
+            //broker在接受producer发送消息的时候，就是netty服务器；broker在向nameServer建立连接、发送心跳的时候，它就是netty客户端。
             final BrokerConfig brokerConfig = new BrokerConfig();
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
 
+            //netty tls加密相关，不关键
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
+            //broker作为netty服务器默认监听的端口号是10911。
             nettyServerConfig.setListenPort(10911);
+
+            //和上面3个配置类放在一起就是4个关键配置类
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
 
+            //如果broker是slave，需要设置特殊参数，这里暂不深入
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
                 int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
             }
 
+            //以下和nameServer类似
             if (commandLine.hasOption('c')) {
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
@@ -211,6 +225,13 @@ public class BrokerStartup {
             MixAll.printObjectProperties(log, nettyClientConfig);
             MixAll.printObjectProperties(log, messageStoreConfig);
 
+            //关键,核心就以下几点
+            //1）把上面传入的4个配置类信息保存下。
+            //2）创建出多个manager、process管理和处理组件。比如TopicConfigManager管理topic、PullMessageProcess处理消费者消息拉取请求。等等
+            //3）创建出一堆各种线程池需要用到的阻塞队列，基本都是LinkedBlockingQueue，用配置类里的参数去初始化他们。比如有sendThreadPoolQueue、pullThreadPoolQueue等。
+            //4）一些其他性功能组件：比如统计、比如故障处理。
+            //BrokerController就是broker的核心管理组件。
+            //我们通过脚本和sh命令，把brokerStartup这个启动类跑起来，变成一个JVM进程broker，里面main方法，把BrokerController这个核心管理类创建出来，之后就用BrokerController来管控broker所有的操作。
             final BrokerController controller = new BrokerController(
                 brokerConfig,
                 nettyServerConfig,
@@ -219,6 +240,7 @@ public class BrokerStartup {
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
 
+            //关键，和nameServer稍有不同
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();

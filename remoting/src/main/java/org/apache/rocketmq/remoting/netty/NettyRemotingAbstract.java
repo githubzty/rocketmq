@@ -423,6 +423,7 @@ public abstract class NettyRemotingAbstract {
             });
 
             //等待相应结果。截至这里，broker启动向nameServer注册流程结束
+            //回过头去看nameServer的controller.initialize()。nameServer处理broker注册请求流程。
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
             if (null == responseCommand) {
                 if (responseFuture.isSendRequestOK()) {

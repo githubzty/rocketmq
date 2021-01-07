@@ -84,6 +84,8 @@ public class NamesrvController {
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
+        //关键，nameServer接收broker注册流程里。
+        //Processor就是请求处理器，是nameServer用来处理网络请求的组件。进入
         this.registerProcessor();
 
         //启动后台线程，执行定时任务，定时扫描哪些broker没发心跳，就知道他挂了。
@@ -151,7 +153,9 @@ public class NamesrvController {
             this.remotingServer.registerDefaultProcessor(new ClusterTestRequestProcessor(this, namesrvConfig.getProductEnvName()),
                 this.remotingExecutor);
         } else {
-
+            //nameserver 初始化的时候，初始化了netty server来接受网络请求。
+            //这里把nameserver默认请求处理组件，注册给netty server。
+            // 也就是netty server接收到网络请求，都由这个组件处理。
             this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.remotingExecutor);
         }
     }

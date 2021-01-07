@@ -906,6 +906,7 @@ public class BrokerController {
             @Override
             public void run() {
                 try {
+                    //关键，broker启动注册到nameServer场景。进入查看registerBrokerAll
                     BrokerController.this.registerBrokerAll(true, false, brokerConfig.isForceRegister());
                 } catch (Throwable e) {
                     log.error("registerBrokerAll Exception", e);
@@ -957,17 +958,23 @@ public class BrokerController {
             topicConfigWrapper.setTopicConfigTable(topicConfigTable);
         }
 
+        //关键，核心就是判断下是否需要注册，需要的话调用doRegisterBrokerAll方法去注册
         if (forceRegister || needRegister(this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
             this.brokerConfig.getBrokerName(),
             this.brokerConfig.getBrokerId(),
             this.brokerConfig.getRegisterBrokerTimeoutMills())) {
+            //关键，进入
             doRegisterBrokerAll(checkOrderConfig, oneway, topicConfigWrapper);
         }
     }
 
     private void doRegisterBrokerAll(boolean checkOrderConfig, boolean oneway,
         TopicConfigSerializeWrapper topicConfigWrapper) {
+        //关键，这里就是使用了前面创建的netty客户端brokerOuterAPI，去发请求给nameServer。
+        //然后获得注册的结果，注意下结果是个List，因为broker会将自己注册给所有nameServer,因为nameServer是peer-to-peer的。
+        //这和eureka，zk的是不太一样的，比如服务向eureka是向一个节点注册，然后节点服务器上接到后会传播出去。
+        //进入registerBrokerAll
         List<RegisterBrokerResult> registerBrokerResultList = this.brokerOuterAPI.registerBrokerAll(
             this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
@@ -980,6 +987,7 @@ public class BrokerController {
             this.brokerConfig.getRegisterBrokerTimeoutMills(),
             this.brokerConfig.isCompressedRegister());
 
+        //注册结果处理，涉及到MasterHAServer之类的东西，这里暂不深究
         if (registerBrokerResultList.size() > 0) {
             RegisterBrokerResult registerBrokerResult = registerBrokerResultList.get(0);
             if (registerBrokerResult != null) {

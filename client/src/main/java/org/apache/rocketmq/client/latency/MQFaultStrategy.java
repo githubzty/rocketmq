@@ -58,6 +58,9 @@ public class MQFaultStrategy {
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
         if (this.sendLatencyFaultEnable) {
             try {
+                //这里其实就是获取一个自增长的index。
+                //然后用Index对MessageQueueList做取模操作。获取要往哪个queue发。
+                //本质就是个简单的负载均衡算法。
                 int index = tpInfo.getSendWhichQueue().getAndIncrement();
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();

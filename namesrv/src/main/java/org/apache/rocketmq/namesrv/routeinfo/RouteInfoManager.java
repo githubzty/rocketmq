@@ -451,6 +451,7 @@ public class RouteInfoManager {
         //就是拿到存放broker最近心跳时间的表。
         //然后遍历去看，最近心跳时间+过期时间超过当前时间了没。
         //超过了就说明过期了就从表中剔除，关闭channel。
+        //下面去看Producer发送消息流程。example里的producer.send
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<String, BrokerLiveInfo> next = it.next();

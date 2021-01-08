@@ -108,11 +108,19 @@ public class RouteInfoManager {
         final TopicConfigSerializeWrapper topicConfigWrapper,
         final List<String> filterServerList,
         final Channel channel) {
+
+        //这里大致来讲
+        //就是把broker发送过来的各种路由信息，保存在nameServer上的各map里。那这就是注册上了。
+        //因为可能会有多个Broker同时注册，所有加了读写锁里的写锁。
+        //broker续约心跳，其实也是走的这里，相当于再来注册下，把心跳时间更新下。
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
             try {
                 this.lock.writeLock().lockInterruptibly();
 
+                //根据clusterName对应一个set集合,把brokerNames扔到这个set集合中。
+                //也就是维护一个broker集群中，有哪些broker存在的。
+                //用set，就可以避免broker续约注册，产生重复注册。
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
@@ -122,12 +130,19 @@ public class RouteInfoManager {
 
                 boolean registerFirst = false;
 
+                //brokerAddrTable作为核心路由表。
+                //存放了所有broker的详细路由数据。
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+
+                //关键，如果是第一次注册，也就是broker启动注册，这里是null。就会new一个brokerData，放进去核心路由表。
+                //如果是续约不会走。
                 if (null == brokerData) {
                     registerFirst = true;
                     brokerData = new BrokerData(clusterName, brokerName, new HashMap<Long, String>());
                     this.brokerAddrTable.put(brokerName, brokerData);
                 }
+
+                //对路由数据做些处理，暂时不用管
                 Map<Long, String> brokerAddrsMap = brokerData.getBrokerAddrs();
                 //Switch slave to master: first remove <1, IP:PORT> in namesrv, then add <0, IP:PORT>
                 //The same IP:PORT must only have one record in brokerAddrTable
@@ -156,6 +171,10 @@ public class RouteInfoManager {
                     }
                 }
 
+                //关键，这里就是Broker每隔一段时间续约心跳地方。
+                //每次Broker注册，BrokerLiveInfo时间戳就会更新，代表最近心跳时间。
+                //下面去看nameServer如何感知到broker已经挂了。
+                // 去看nameServer启动初始化的时候boolean initResult = controller.initialize()，里面scheduledExecutorService
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
                         System.currentTimeMillis(),
@@ -166,6 +185,7 @@ public class RouteInfoManager {
                     log.info("new broker registered, {} HAServer: {}", brokerAddr, haServerAddr);
                 }
 
+                //下面先不用管。
                 if (filterServerList != null) {
                     if (filterServerList.isEmpty()) {
                         this.filterServerTable.remove(brokerAddr);
@@ -427,6 +447,10 @@ public class RouteInfoManager {
     }
 
     public void scanNotActiveBroker() {
+        //这里逻辑其实很简单
+        //就是拿到存放broker最近心跳时间的表。
+        //然后遍历去看，最近心跳时间+过期时间超过当前时间了没。
+        //超过了就说明过期了就从表中剔除，关闭channel。
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<String, BrokerLiveInfo> next = it.next();

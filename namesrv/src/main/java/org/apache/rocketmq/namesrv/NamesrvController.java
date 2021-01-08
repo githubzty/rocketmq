@@ -156,6 +156,7 @@ public class NamesrvController {
             //nameserver 初始化的时候，初始化了netty server来接受网络请求。
             //这里把nameserver默认请求处理组件，注册给netty server。
             // 也就是netty server接收到网络请求，都由这个组件处理。
+            //进入DefaultRequestProcessor查看processRequest方法
             this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.remotingExecutor);
         }
     }

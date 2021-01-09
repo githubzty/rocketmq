@@ -207,6 +207,7 @@ public class MappedFile extends ReferenceResource {
             byteBuffer.position(currentPos);
             AppendMessageResult result;
             if (messageExt instanceof MessageExtBrokerInner) {
+                //关键，将消息追加到mappedFile映射的一块内存中，非直接刷入磁盘。
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBrokerInner) messageExt);
             } else if (messageExt instanceof MessageExtBatch) {
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBatch) messageExt);
@@ -269,6 +270,7 @@ public class MappedFile extends ReferenceResource {
      * @return The current flushed position
      */
     public int flush(final int flushLeastPages) {
+        //能否刷盘判断，进入
         if (this.isAbleToFlush(flushLeastPages)) {
             if (this.hold()) {
                 int value = getReadPosition();
@@ -335,6 +337,10 @@ public class MappedFile extends ReferenceResource {
         }
     }
 
+    //满足如下条件任意条件,可以刷盘：
+    //1. 映射文件已经写满
+    //2. flushLeastPages > 0 && 未flush部分超过flushLeastPages
+    //3. flushLeastPages = 0 && 有新写入部分
     private boolean isAbleToFlush(final int flushLeastPages) {
         int flush = this.flushedPosition.get();
         int write = getReadPosition();

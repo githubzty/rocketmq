@@ -216,6 +216,8 @@ public class DefaultMessageStore implements MessageStore {
      * @throws Exception
      */
     public void start() throws Exception {
+    //消息写入commitLog后，如何写入consumeQueue和indexFile?
+    //实际就是broker启动的时候，会调用这个方法。然后启动reputMessageService线程，去做上面两个操作。
 
         lock = lockFile.getChannel().tryLock(0, 1, false);
         if (lock == null || lock.isShared() || !lock.isValid()) {
@@ -257,6 +259,9 @@ public class DefaultMessageStore implements MessageStore {
             log.info("[SetReputOffset] maxPhysicalPosInLogicQueue={} clMinOffset={} clMaxOffset={} clConfirmedOffset={}",
                 maxPhysicalPosInLogicQueue, this.commitLog.getMinOffset(), this.commitLog.getMaxOffset(), this.commitLog.getConfirmOffset());
             this.reputMessageService.setReputFromOffset(maxPhysicalPosInLogicQueue);
+
+            //关键，在这里起了一个线程去写入consumeQueue和indexFile。
+            //点reputMessageService,进入类，看run
             this.reputMessageService.start();
 
             /**
@@ -352,11 +357,14 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
+        //前面就是一堆校验，稍微看下
+
         if (this.shutdown) {
             log.warn("message store has shutdown, so putMessage is forbidden");
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
         }
 
+        // 从节点不允许写入
         if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
@@ -366,6 +374,7 @@ public class DefaultMessageStore implements MessageStore {
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
         }
 
+        // store是否允许写入
         if (!this.runningFlags.isWriteable()) {
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
@@ -377,11 +386,13 @@ public class DefaultMessageStore implements MessageStore {
             this.printTimes.set(0);
         }
 
+        // 消息过长
         if (msg.getTopic().length() > Byte.MAX_VALUE) {
             log.warn("putMessage message topic length too long " + msg.getTopic().length());
             return new PutMessageResult(PutMessageStatus.MESSAGE_ILLEGAL, null);
         }
 
+        // 消息附加属性过长
         if (msg.getPropertiesString() != null && msg.getPropertiesString().length() > Short.MAX_VALUE) {
             log.warn("putMessage message properties length too long " + msg.getPropertiesString().length());
             return new PutMessageResult(PutMessageStatus.PROPERTIES_SIZE_EXCEEDED, null);
@@ -392,6 +403,8 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         long beginTime = this.getSystemClock().now();
+
+        // 关键，添加消息到commitLog
         PutMessageResult result = this.commitLog.putMessage(msg);
 
         long elapsedTime = this.getSystemClock().now() - beginTime;
@@ -1419,12 +1432,14 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public void doDispatch(DispatchRequest req) {
+        //这里dispatcherList其实就是两个，consumeQueue和indexFile
         for (CommitLogDispatcher dispatcher : this.dispatcherList) {
             dispatcher.dispatch(req);
         }
     }
 
     public void putMessagePositionInfo(DispatchRequest dispatchRequest) {
+        //其实就是找到消息对应的comsumeQueue,然后写入。
         ConsumeQueue cq = this.findConsumeQueue(dispatchRequest.getTopic(), dispatchRequest.getQueueId());
         cq.putMessagePositionInfoWrapper(dispatchRequest);
     }
@@ -1486,6 +1501,7 @@ public class DefaultMessageStore implements MessageStore {
             switch (tranType) {
                 case MessageSysFlag.TRANSACTION_NOT_TYPE:
                 case MessageSysFlag.TRANSACTION_COMMIT_TYPE:
+                    //进入
                     DefaultMessageStore.this.putMessagePositionInfo(request);
                     break;
                 case MessageSysFlag.TRANSACTION_PREPARED_TYPE:
@@ -1830,12 +1846,16 @@ public class DefaultMessageStore implements MessageStore {
                         this.reputFromOffset = result.getStartOffset();
 
                         for (int readSize = 0; readSize < result.getSize() && doNext; ) {
+
+                            //从commitLog去获取到dispatchRequest，拿到一份需要转发的消息数据。
                             DispatchRequest dispatchRequest =
                                 DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);
                             int size = dispatchRequest.getBufferSize() == -1 ? dispatchRequest.getMsgSize() : dispatchRequest.getBufferSize();
 
                             if (dispatchRequest.isSuccess()) {
                                 if (size > 0) {
+
+                                    //进行转发到consumeQueue和indexFile。
                                     DefaultMessageStore.this.doDispatch(dispatchRequest);
 
                                     if (BrokerRole.SLAVE != DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole()
@@ -1890,6 +1910,7 @@ public class DefaultMessageStore implements MessageStore {
         public void run() {
             DefaultMessageStore.log.info(this.getServiceName() + " service started");
 
+            //每隔1ms，会把最近写入commitLog的消息进行一次转发。具体用的是doReput方法，进入查看。
             while (!this.isStopped()) {
                 try {
                     Thread.sleep(1);

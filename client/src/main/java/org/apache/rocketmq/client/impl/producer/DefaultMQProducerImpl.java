@@ -722,6 +722,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final TopicPublishInfo topicPublishInfo,
         final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         long beginStartTime = System.currentTimeMillis();
+
+        //需要先获取到要发送的broker的实际地址，才能进行网络通信。
+        //从需要发送的messageQueue里，获取到这个queue所在的brokerName。
+        //根据brokerName去本地缓存查到他的实际地址。
+        //如果本地缓存里拿不到这个broker的实际地址，就去nameServer拉取topic路由数据。
+        //然后再去本地缓存查这个broker的实际地址。
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
             tryToFindTopicPublishInfo(mq.getTopic());
@@ -734,6 +740,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
             byte[] prevBody = msg.getBody();
             try {
+                //给消息分配全局唯一id
                 //for MessageBatch,ID has been set in the generating process
                 if (!(msg instanceof MessageBatch)) {
                     MessageClientIDSetter.setUniqID(msg);
@@ -747,6 +754,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
                 int sysFlag = 0;
                 boolean msgBodyCompressed = false;
+                //对超过4kb的消息进行压缩
                 if (this.tryToCompressMessage(msg)) {
                     sysFlag |= MessageSysFlag.COMPRESSED_FLAG;
                     msgBodyCompressed = true;
@@ -790,6 +798,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     this.executeSendMessageHookBefore(context);
                 }
 
+                //构建请求，放进去信息。
                 SendMessageRequestHeader requestHeader = new SendMessageRequestHeader();
                 requestHeader.setProducerGroup(this.defaultMQProducer.getProducerGroup());
                 requestHeader.setTopic(msg.getTopic());
@@ -817,6 +826,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     }
                 }
 
+                //根据不同的模式，把消息发出去。
+                //底层还是通过producer和broker通过netty建立长连接，基于长连接进行持续通信。
+                //这里不详细展开，去看broker通过netty服务器接到消息后怎么处理。进入SendMessageProcessor#processRequest
                 SendResult sendResult = null;
                 switch (communicationMode) {
                     case ASYNC:

@@ -564,6 +564,7 @@ public class CommitLog {
         String topic = msg.getTopic();
         int queueId = msg.getQueueId();
 
+        //事务相关，先过
         final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
         if (tranType == MessageSysFlag.TRANSACTION_NOT_TYPE
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
@@ -598,9 +599,12 @@ public class CommitLog {
 
         long eclipsedTimeInLock = 0;
 
+        //获取写入映射文件
         MappedFile unlockMappedFile = null;
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
 
+        //获取写入锁
+        //broker上写入消息到commitLog的时候，都是串行的。并发写入文件必然有乱序问题。并且顺序追加写入效率也很高。
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
         try {
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
@@ -610,6 +614,7 @@ public class CommitLog {
             // global
             msg.setStoreTimestamp(beginLockTimestamp);
 
+            // 当不存在映射文件或者映射文件已经满了，进行创建
             if (null == mappedFile || mappedFile.isFull()) {
                 mappedFile = this.mappedFileQueue.getLastMappedFile(0); // Mark: NewFile may be cause noise
             }
@@ -619,11 +624,13 @@ public class CommitLog {
                 return new PutMessageResult(PutMessageStatus.CREATE_MAPEDFILE_FAILED, null);
             }
 
+            // 关键，存储消息到os cache。 进入
             result = mappedFile.appendMessage(msg, this.appendMessageCallback);
+
             switch (result.getStatus()) {
                 case PUT_OK:
                     break;
-                case END_OF_FILE:
+                case END_OF_FILE:  // 当文件尾时，获取新的映射文件，并进行插入
                     unlockMappedFile = mappedFile;
                     // Create a new file, re-write the message
                     mappedFile = this.mappedFileQueue.getLastMappedFile(0);
@@ -667,8 +674,11 @@ public class CommitLog {
         storeStatsService.getSinglePutMessageTopicTimesTotal(msg.getTopic()).incrementAndGet();
         storeStatsService.getSinglePutMessageTopicSizeTotal(topic).addAndGet(result.getWroteBytes());
 
+        //刷盘（去看public int flush）
         handleDiskFlush(result, putMessageResult, msg);
+        //主从同步
         handleHA(result, putMessageResult, msg);
+        //从上面顺序可以知道，消息接到，先放入os pagecache，然后刷盘，然后主从同步的顺序。
 
         return putMessageResult;
     }

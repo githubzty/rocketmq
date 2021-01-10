@@ -686,10 +686,13 @@ public class CommitLog {
     public void handleDiskFlush(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
         // Synchronization flush
         if (FlushDiskType.SYNC_FLUSH == this.defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
+            //构建了一个GroupCommitService
             final GroupCommitService service = (GroupCommitService) this.flushCommitLogService;
             if (messageExt.isWaitStoreMsgOK()) {
                 GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
+                //把刷盘请求提交过去。
                 service.putRequest(request);
+                //等待刷盘结果。实际刷盘代码点进去GroupCommitService，看doCommit
                 boolean flushOK = request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                 if (!flushOK) {
                     log.error("do groupcommit, wait for flush failed, topic: " + messageExt.getTopic() + " tags: " + messageExt.getTags()
@@ -703,6 +706,8 @@ public class CommitLog {
         // Asynchronous flush
         else {
             if (!this.defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
+                //异步算盘就是唤醒了一个flushCommitLogService组件。
+                //他实际其实是个线程，是个抽象父类，实际唤醒的是他的子类CommitRealTimeService代表的线程
                 flushCommitLogService.wakeup();
             } else {
                 commitLogService.wakeup();
@@ -1151,6 +1156,7 @@ public class CommitLog {
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
 
                             if (!flushOK) {
+                                //实际刷盘逻辑。进入
                                 CommitLog.this.mappedFileQueue.flush(0);
                             }
                         }

@@ -280,6 +280,8 @@ public class MappedFile extends ReferenceResource {
                     if (writeBuffer != null || this.fileChannel.position() != 0) {
                         this.fileChannel.force(false);
                     } else {
+                        //实际刷盘语句。
+                        //mappedByteBuffer是jdk nio下的api，force就是强行把内存数据刷入磁盘。
                         this.mappedByteBuffer.force();
                     }
                 } catch (Throwable e) {

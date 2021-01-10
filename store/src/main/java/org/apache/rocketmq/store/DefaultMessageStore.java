@@ -288,6 +288,9 @@ public class DefaultMessageStore implements MessageStore {
         this.storeStatsService.start();
 
         this.createTempFile();
+
+        //定时任务，定期检查删除broker中过期数据。默认3天。可通过fileReservedTime设置
+        //进入
         this.addScheduleTask();
         this.shutdown = false;
     }
@@ -1235,9 +1238,11 @@ public class DefaultMessageStore implements MessageStore {
 
     private void addScheduleTask() {
 
+        //延迟60s启动，每隔10s去检查
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
+                //具体调用清理。进入
                 DefaultMessageStore.this.cleanFilesPeriodically();
             }
         }, 1000 * 60, this.messageStoreConfig.getCleanResourceInterval(), TimeUnit.MILLISECONDS);
@@ -1279,6 +1284,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private void cleanFilesPeriodically() {
+        //定期清理commitLog,和consumeQueue
         this.cleanCommitLogService.run();
         this.cleanConsumeQueueService.run();
     }

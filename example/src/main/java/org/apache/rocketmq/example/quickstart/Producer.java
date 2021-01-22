@@ -65,6 +65,7 @@ public class Producer {
                 /*
                  * Call send message to deliver message to one of brokers.
                  */
+                //发送消息流程源码入口
                 SendResult sendResult = producer.send(msg);
 
                 System.out.printf("%s%n", sendResult);

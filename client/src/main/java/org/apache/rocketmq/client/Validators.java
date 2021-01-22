@@ -111,12 +111,14 @@ public class Validators {
             throw new MQClientException("The specified topic is blank", null);
         }
 
+        //topic只允许这些"^[%|a-zA-Z0-9_-]+$"，也就是%、大小写字母、数字、下中划线
         if (!regularExpressionMatcher(topic, PATTERN)) {
             throw new MQClientException(String.format(
                 "The specified topic[%s] contains illegal characters, allowing only %s", topic,
                 VALID_PATTERN_STR), null);
         }
 
+        //topic允许的长度255，注意broker里是限制为127
         if (topic.length() > CHARACTER_MAX_LENGTH) {
             throw new MQClientException("The specified topic is longer than topic max length 255.", null);
         }

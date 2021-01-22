@@ -57,7 +57,7 @@ public class NamesrvStartup {
         try {
             //NamesrvController核心组件，用来接收、处理各种各样请求的。
             //类比学习：用过spring mvc的都知道，controller它一般就是用来接受各种各样请求的。
-            //而nameServer它的核心功能就是接受broker的注册请求，producer的拉取路由信息请求等。
+            //而nameServer它的核心功能就是接受broker的注册请求，producer、consumer的拉取路由信息请求等。
             //所以可以知道这个controller是核心组件。可以先进createNamesrvController看下怎么创建的。
             NamesrvController controller = createNamesrvController(args);
             //上面是创建出来了NamesrvController，下面进去看下如何start
@@ -91,6 +91,7 @@ public class NamesrvStartup {
         //NettyServerConfig是用于接收网络请求的netty服务器的配置参数。
         //设置nameServer默认监听端口号9876（后续代码通过命令行或者配置文件覆盖）。
         //从这里也可以看到，nameServer对外接受broker、producer等的网络请求，是基于netty实现的网络服务器。
+        //进入查看下两个配置类
         final NamesrvConfig namesrvConfig = new NamesrvConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
         nettyServerConfig.setListenPort(9876);

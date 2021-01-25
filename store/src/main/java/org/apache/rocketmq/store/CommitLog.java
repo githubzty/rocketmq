@@ -605,6 +605,7 @@ public class CommitLog {
 
         //获取写入锁
         //broker上写入消息到commitLog的时候，都是串行的。并发写入文件必然有乱序问题。并且顺序追加写入效率也很高。
+        //使用ReentrantLock还是自旋锁，看配置
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
         try {
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();

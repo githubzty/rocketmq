@@ -389,7 +389,7 @@ public class DefaultMessageStore implements MessageStore {
             this.printTimes.set(0);
         }
 
-        // 消息过长
+        // 消息topic过长。producer那限制是256，这里是127
         if (msg.getTopic().length() > Byte.MAX_VALUE) {
             log.warn("putMessage message topic length too long " + msg.getTopic().length());
             return new PutMessageResult(PutMessageStatus.MESSAGE_ILLEGAL, null);
@@ -407,7 +407,7 @@ public class DefaultMessageStore implements MessageStore {
 
         long beginTime = this.getSystemClock().now();
 
-        // 关键，添加消息到commitLog
+        // 关键，添加消息到commitLog。进入
         PutMessageResult result = this.commitLog.putMessage(msg);
 
         long elapsedTime = this.getSystemClock().now() - beginTime;

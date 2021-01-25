@@ -363,6 +363,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
         long beginStartTime = System.currentTimeMillis();
 
+        //produce给broker发消息，broker给nameserver发消息，都是用这个。
         //关键，根据传入的nameServer的地址，建立一个channel。
         //也就是这台broker机器和nameServer机器之间的一个网络连接，连接建立后用一个channel表示他。
         //进入

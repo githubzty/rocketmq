@@ -426,6 +426,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     private void makeSureStateOK() throws MQClientException {
+        //判断下是不是producer.start();成功。跟踪serviceState可以发现是start里面修改为RUNNING
         if (this.serviceState != ServiceState.RUNNING) {
             throw new MQClientException("The producer service state not OK, "
                 + this.serviceState
@@ -547,15 +548,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final SendCallback sendCallback,
         final long timeout
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //检查状态是不是running，也就是producer.start();是否成功
         this.makeSureStateOK();
+        //疑问：这里不太清楚，为什么前面校验过了，这里要再次校验？
         Validators.checkMessage(msg, this.defaultMQProducer);
         final long invokeID = random.nextLong();
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
 
-        //关键。从这里可以知道。不是produce启动的时候，从nameServer拉取全量的topic，broker数据。（和微服务拉取eureka注册数据不同）
-        //而是在send消息的时候，才去拉取对应topic的路由信息。
+        //关键。msg信息里有topic，但是发消息是需要具体知道往哪个broker哪个机器下发的。
+        //所以在send消息的时候，需要从本地缓存拉取topic对应的路由信息，如果没有，会从nameServer拉取对应topic的路由信息。
         //进入查看
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
@@ -563,10 +566,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             MessageQueue mq = null;
             Exception exception = null;
             SendResult sendResult = null;
+            //如果是同步，有重试次数，默认1+2=3；如果是异步，就发一次
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             int times = 0;
             String[] brokersSent = new String[timesTotal];
             for (; times < timesTotal; times++) {
+                //注意这个作为参数传入selectOneMessageQueue的。
+                //第一次是null，第二次就有brokerName,也就是知道上次是往哪个broker的，重试就可以往集群下另外机器发。
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
 
                 //关键。上面已经从本地或者nameServer获取到要发送的topic的路由信息了。那么具体往topic下哪个messageQueue发就在这。
@@ -694,10 +700,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
-        //先去看下本地是否有topic的缓存，没有就去拉一下
+        //先去看下本地是否有该topic的缓存，没有就去拉一下
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
+            //从nameserver拉取该topic的路由信息。也调用了下面那个updateTopicRouteInfoFromNameServer
+            // 具体不展开
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
         }
@@ -828,7 +836,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
                 //根据不同的模式，把消息发出去。
                 //底层还是通过producer和broker通过netty建立长连接，基于长连接进行持续通信。
-                //这里不详细展开，去看broker通过netty服务器接到消息后怎么处理。进入SendMessageProcessor#processRequest
+                //可以从SYNC那追踪进去看下。会发现最终调用的是和broker发消息给nameserver同一个方法，remoting下的。
+                //结束后，去看broker通过netty服务器接到消息后怎么处理。进入SendMessageProcessor#processRequest
                 SendResult sendResult = null;
                 switch (communicationMode) {
                     case ASYNC:
@@ -875,6 +884,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         if (timeout < costTimeSync) {
                             throw new RemotingTooMuchRequestException("sendKernelImpl call timeout");
                         }
+                        //进入
                         sendResult = this.mQClientFactory.getMQClientAPIImpl().sendMessage(
                             brokerAddr,
                             mq.getBrokerName(),

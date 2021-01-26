@@ -340,7 +340,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     //满足如下条件任意条件,可以刷盘：
-    //1. 映射文件已经写满
+    //1. 内存映射文件已经写满
     //2. flushLeastPages > 0 && 未flush部分超过flushLeastPages
     //3. flushLeastPages = 0 && 有新写入部分
     private boolean isAbleToFlush(final int flushLeastPages) {

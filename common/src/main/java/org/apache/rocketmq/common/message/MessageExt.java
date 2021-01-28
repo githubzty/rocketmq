@@ -69,11 +69,13 @@ public class MessageExt extends Message {
     public static ByteBuffer socketAddress2ByteBuffer(final SocketAddress socketAddress, final ByteBuffer byteBuffer) {
         InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
         InetAddress address = inetSocketAddress.getAddress();
+        //4字节的Ip地址
         if (address instanceof Inet4Address) {
             byteBuffer.put(inetSocketAddress.getAddress().getAddress(), 0, 4);
         } else {
             byteBuffer.put(inetSocketAddress.getAddress().getAddress(), 0, 16);
         }
+        //4字节的端口号
         byteBuffer.putInt(inetSocketAddress.getPort());
         byteBuffer.flip();
         return byteBuffer;

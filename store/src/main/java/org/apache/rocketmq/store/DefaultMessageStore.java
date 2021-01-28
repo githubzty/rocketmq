@@ -379,6 +379,7 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         // store是否允许写入
+        //报这个错，最有可能是磁盘空间不足
         if (!this.runningFlags.isWriteable()) {
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
